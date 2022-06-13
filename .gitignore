@@ -5,7 +5,7 @@ __pycache__/
 
 .DS_Store
 fraud-detection-env/
-model/
+model/*.pkl
 dataset/
 PredictFraud_Result.csv
 
