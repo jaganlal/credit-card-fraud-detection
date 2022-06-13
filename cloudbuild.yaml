@@ -17,4 +17,4 @@ steps:
   - run
   - --filename=k8s/
   - --location=us-east1-b
-  - --cluster=ml-model-inference-op-on-kube
+  - --cluster=cc-fraud-detection-on-kube
