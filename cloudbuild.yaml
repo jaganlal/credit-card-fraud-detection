@@ -1,9 +1,9 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/creditcard_fraud_detection:v1', '.']
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/app:v1', '.']
   timeout: 1200s
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/$PROJECT_ID/creditcard_fraud_detection:v1']
+  args: ['push', 'gcr.io/$PROJECT_ID/app:v1']
 - name: 'gcr.io/cloud-builders/gcloud'
   entrypoint: "bash"
   args:
