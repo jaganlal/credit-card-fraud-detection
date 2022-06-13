@@ -16,4 +16,4 @@ spec:
       - name: creditcard-fraud-detection-app
         image: gcr.io/mlops-poc-337511/creditcard_fraud_detection:v1
         ports:
-        - containerPort: 8501
+        - containerPort: 9876

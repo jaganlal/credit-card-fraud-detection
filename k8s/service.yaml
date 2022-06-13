@@ -8,4 +8,4 @@ spec:
     app: frauddetection
   ports:
   - port: 80
-    targetPort: 8501
+    targetPort: 9876
