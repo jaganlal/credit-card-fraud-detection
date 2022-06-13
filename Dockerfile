@@ -19,4 +19,4 @@ RUN pip install -r requirements.txt
 
 # CMD ["gunicorn", "--workers=2", "--bind", "0.0.0.0:9876", "wsgi:app"]
 
-# CMD ["gunicorn", "--workers=2", "--chdir=.", "--bind", "0.0.0.0:9876", "--access-logfile=-", "--error-logfile=-", "app:app"]
+CMD ["gunicorn", "--workers=2", "--chdir=.", "--bind", "0.0.0.0:9876", "--access-logfile=-", "--error-logfile=-", "wsgi:app"]
