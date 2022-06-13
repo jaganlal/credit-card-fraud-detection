@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+.DS_Store
+fraud-detection-env/
+model/
+dataset/
+PredictFraud_Result.csv
+
 # C extensions
 *.so
 
