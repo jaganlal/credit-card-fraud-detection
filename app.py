@@ -1,4 +1,6 @@
 import os, sys
+from os.path import exists
+from datetime import datetime
 
 from flask import Flask, request, render_template
 from flask_cors import CORS
@@ -8,11 +10,11 @@ import pandas as pd
 import numpy as np
 
 import pickle
+from zipfile import ZipFile
 
 from sklearn import metrics, model_selection
 from sklearn.model_selection import train_test_split
-
-from xgboost.sklearn import XGBClassifier
+from sklearn.preprocessing import OrdinalEncoder
 
 app = Flask(__name__)
 cors = CORS(app, resources={r'/*': {'origins': '*'}})
@@ -21,32 +23,45 @@ app.config['DEBUG'] = True
 # Globals
 default_model_path = 'model'
 default_model = '/fraud-detection.pkl'
+default_model_zip = '/fraud-detection.zip'
 
 # Routes
 @app.route('/')
 def main():
-	return render_template('index.html')
+  extract_model_from_zip()
+  return render_template('index.html')
 
 @app.route('/health')
 def health():
-    return '<h3>Health Check OK!!</h3>'
+  return '<h3>Health Check OK!!</h3>'
 
 @app.route('/predict', methods=['POST'])
-def predict_from_model():
-  '''Predict whether to approve loan or not
+def predict_fraudulent_transaction():
+  '''Predict whether its a fraudulent transaction or not
+
   :param params: {
-    data (required): 'contains the data to predict the loan approval',
-      Gender: 'Male/Female',
-      Married: 'Yes/No',
-      Dependents: '0/1/2/3+',
-      Education: 'Graduate/Not Graduate',
-      Self_Employed: 'Yes/No',
-      ApplicantIncome: Numeric value,
-      CoapplicantIncome: Numeric value,
-      LoanAmount: Numeric value,
-      Loan_Amount_Term: Numeric value,
-      Credit_History: Numeric value,
-      Property_Area: 'Rural/Semiurban/Urban'
+    data (required): 'contains the transaction data',
+      transaction_time: '2020-06-21 12:14:25',
+      credit_card_number: '2291163933867244',
+      merchant: 'fraud_Kirlin and Sons',
+      category: 'personal_care',
+      amount: '2.86',
+      first: 'Jeff',
+      last: 'Elliott',
+      gender: 'M',
+      street: '351 Darlene Green',
+      city: 'Columbia',
+      state: 'SC',
+      zip: 29209,
+      lat: 33.9659,
+      long: -80.9355,
+      city_pop: 333497,
+      job: 'Mechanical engineer',
+      dob: '1968-03-19',
+      transaction_id: '2da90c7d74bd46a0caf3777415b3ebd3',
+      unix_time: 1371816865,
+      merch_lat: 33.986391,
+      merch_long: -81.200714
     model_name (optional): 'path and name of the model to load'
   }
   :return: success - result object with success message, 
@@ -56,6 +71,15 @@ def predict_from_model():
   print('Prediction Params:', params)
   result = predict(params)
   return json.dumps(result)
+
+def extract_model_from_zip():
+  compressed_model_path = default_model_path + default_model_zip
+  full_path = os.path.join(os.path.dirname(__file__), compressed_model_path)
+
+  with ZipFile(full_path, 'r') as zipObj:
+   # Extract all the contents of zip file in current directory
+  #  extraction_path = os.path.join(os.path.dirname(__file__))
+   zipObj.extractall()
 
 def predict(params):
   result = {}
@@ -71,79 +95,49 @@ def predict(params):
 
     model_name = os.path.join(os.path.dirname(__file__), model_name)
 
-    if isinstance(data['Gender'], str) and data['Gender'] is not None and len(data['Gender']) > 0:
-      if (data['Gender'] == 'Male'):
-        data['Gender'] = 1
-      else:
-        data['Gender'] = 0
+    # check if the pickle file exists or not
+    file_exists = exists(model_name)
+    if file_exists == False:
+      extract_model_from_zip()
+      file_exists = exists(model_name)
+      if file_exists == False:
+        result = {
+          'error': 'Model does not exist'
+        }
+        return result
 
-    if isinstance(data['Education'], str) and data['Education'] is not None and len(data['Education']) > 0:
-      if (data['Education'] == 'Graduate'):
-        data['Education'] = 1
-      else:
-        data['Education'] = 0
+    features = ['transaction_id', 'hour_of_day', 'category', 'amount(usd)', 'merchant', 'job']
+    # df_test = pd.DataFrame(data.items())
+    df_test = pd.DataFrame([data.values()],
+                            columns=data.keys())
 
-    if isinstance(data['Married'], str) and data['Married'] is not None and len(data['Married']) > 0:
-      if (data['Married'] == 'Yes'):
-        data['Married'] = 1
-      else:
-        data['Married'] = 0
+    # Apply function utcfromtimestamp and drop column unix_time
+    df_test['time'] = df_test['unix_time'].apply(datetime.utcfromtimestamp)
 
-    if isinstance(data['Self_Employed'], str) and data['Self_Employed'] is not None and len(data['Self_Employed']) > 0:
-      if (data['Self_Employed'] == 'Yes'):
-        data['Self_Employed'] = 1
-      else:
-        data['Self_Employed'] = 0
+    # Add cloumn hour of day
+    df_test['hour_of_day'] = df_test.time.dt.hour
 
-    if isinstance(data['Dependents'], str) and data['Dependents'] is not None and len(data['Dependents']) > 0:
-      if (data['Dependents'] == '0'):
-        data['Dependents'] = 0
-      elif (data['Dependents'] == '1'):
-        data['Dependents'] = 1
-      elif (data['Dependents'] == '2'):
-        data['Dependents'] = 2
-      elif (data['Dependents'] == '3+'):
-        data['Dependents'] = 3
-      else:
-        data['Dependents'] = 0
+    df_test = df_test[features].set_index("transaction_id")
+    enc = OrdinalEncoder(dtype=np.int64)
+    enc.fit(df_test.loc[:, ['category','merchant','job']])
 
-    if isinstance(data['Property_Area'], str) and data['Property_Area'] is not None and len(data['Property_Area']) > 0:
-      if (data['Property_Area'] == 'Rural'):
-        data['Property_Area'] = 0
-      elif (data['Property_Area'] == 'Semiurban'):
-        data['Property_Area'] = 1
-      elif (data['Property_Area'] == 'Urban'):
-        data['Property_Area'] = 2
-      else:
-        data['Property_Area'] = 0
-    
-    data['LoanAmount_log'] = np.log(data['LoanAmount'])
-    data['Total_Income_log'] = np.log(data['ApplicantIncome'] + data['CoapplicantIncome'])
-
-    data.pop('ApplicantIncome')
-    data.pop('CoapplicantIncome')
-    data.pop('LoanAmount')
+    df_test.loc[:, ['category','merchant','job']] = enc.transform(df_test[['category','merchant','job']])
 
     # Use pickle to load in the pre-trained model
     with open(model_name, 'rb') as f:
       model = pickle.load(f)
 
-    input_variables = pd.DataFrame([data.values()],
-                                  columns=data.keys(),
-                                  dtype=float)
+    prediction  = model.predict(df_test)
+    probability = model.predict_proba(df_test)[:, 1]
 
-
-    input_variables.sort_index(axis=1, inplace=True)
-    prediction = model.predict(input_variables.head(1))
-    
-    loan_status = 'Denied'
-    if(prediction[0] == 1):
-      loan_status = 'Approved'
-
+    if prediction[0] == 1:
+      status = 'This transaction seems to be Fraudulent, with a probability of {0}'.format(probability[0])
+    else:
+      status = 'Legitimate Transaction'
     result = {
-      'Loan Status': loan_status
+      'Status': status
     }
-    print('Loan Prediction:', prediction[0])
+    print('Status:', status)
 
   except Exception as e:
     print('Exception in predict: {0}'.format(e))
@@ -173,31 +167,53 @@ if __name__ == '__main__':
 # TEST DATA FROM POSTMAN
 # {
 #     "data": {
-#         "Gender": 1,
-#         "Married": 1,
-#         "Dependents": 0,
-#         "Education": 1,
-#         "Self_Employed": 0,
-#         "ApplicantIncome": 5720,
-#         "CoapplicantIncome": 0,
-#         "LoanAmount": 110,
-#         "Loan_Amount_Term": 360,
-#         "Credit_History": 1,
-#         "Property_Area": 2
+#       "transaction_time": "2020-06-21 12:14:25",
+#       "credit_card_number": "2291163933867244",
+#       "merchant": "fraud_Kirlin and Sons",
+#       "category": "personal_care",
+#       "amount(usd)": "2.86",
+#       "first": "Jeff",
+#       "last": "Elliott",
+#       "gender": "M",
+#       "street": "351 Darlene Green",
+#       "city": "Columbia",
+#       "state": "SC",
+#       "zip": 29209,
+#       "lat": 33.9659,
+#       "long": -80.9355,
+#       "city_pop": 333497,
+#       "job": "Mechanical engineer",
+#       "dob": "1968-03-19",
+#       "transaction_id": "2da90c7d74bd46a0caf3777415b3ebd3",
+#       "unix_time": 1371816865,
+#       "merch_lat": 33.986391,
+#       "merch_long": -81.200714
 #     }
 # }
+
+# Fraudulent Transaction
 # {
 #     "data": {
-#         "Gender": "Male",
-#         "Married": "Yes",
-#         "Dependents": 0,
-#         "Education": "Graduate",
-#         "Self_Employed": "No",
-#         "ApplicantIncome": 5720,
-#         "CoapplicantIncome": 0,
-#         "LoanAmount": 110,
-#         "Loan_Amount_Term": 360,
-#         "Credit_History": 1,
-#         "Property_Area": "Urban"
+#       "transaction_time": "2020-06-21 22:32:22",
+#       "credit_card_number": "6564459919350820",
+#       "merchant": "fraud_Rodriguez, Yost and Jenkins",
+#       "category": "misc_net",
+#       "amount(usd)": "780.52",
+#       "first": "Douglas",
+#       "last": "Willis",
+#       "gender": "M",
+#       "street": "619 Jeremy Garden Apt. 681",
+#       "city": "Benton",
+#       "state": "WI",
+#       "zip": 53803,
+#       "lat": 42.5545,
+#       "long": -90.3508,
+#       "city_pop": 1306,
+#       "job": "Public relations officer",
+#       "dob": "1958-09-10",
+#       "transaction_id": "ab4b379d2c0c9c667d46508d4e126d72",
+#       "unix_time": 1371853942,
+#       "merch_lat": 42.461127000000005,
+#       "merch_long": -91.147148
 #     }
 # }
